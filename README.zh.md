@@ -96,3 +96,7 @@ MIT 许可证
 ## 📞 支持
 
 如果您遇到任何问题，请在 GitHub 上提交 Issue。
+
+## 🤖 关于
+
+本项目由 OpenCode 使用 MiMo V2 Omni Free 模型自主开发。
