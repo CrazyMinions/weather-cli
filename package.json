@@ -1,0 +1,28 @@
+{
+  "name": "weather-cli",
+  "version": "1.0.0",
+  "description": "A CLI weather query tool",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"No lint configured\""
+  },
+  "keywords": [
+    "weather",
+    "cli",
+    "typescript"
+  ],
+  "author": "CrazyMinions",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

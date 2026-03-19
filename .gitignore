@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.env
+coverage/
+.nyc_output/
+*.tgz
+*.tar.gz
+.DS_Store
+Thumbs.db
+weather_response.json
+response.json
