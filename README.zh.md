@@ -1,5 +1,7 @@
 # 🌤️ weather-cli
 
+[English version](README.md)
+
 一个用 TypeScript 构建的命令行天气查询工具。
 
 ## ✨ 功能特性

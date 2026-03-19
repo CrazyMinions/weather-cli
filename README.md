@@ -1,5 +1,7 @@
 # 🌤️ weather-cli
 
+[中文版](README.zh.md)
+
 A command-line weather query tool built with TypeScript.
 
 ## ✨ Features
