@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { resolveCity } from './resolveCity.js';
 
 interface WeatherData {
   current_condition: Array<{
@@ -19,15 +20,126 @@ interface WttrResponse {
 }
 
 async function fetchWeather(city: string): Promise<WeatherData> {
+  // 使用 wttr.in 的简化JSON格式（更可靠）
   const url = `https://wttr.in/${encodeURIComponent(city)}?format=j1`;
-  const response = await fetch(url);
   
-  if (!response.ok) {
-    throw new Error(`Failed to fetch weather for ${city}: ${response.statusText}`);
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch weather for ${city}: ${response.statusText}`);
+    }
+    
+    const text = await response.text();
+    
+    // wttr.in 有时返回空响应或非JSON响应
+    if (!text || text.trim() === '') {
+      throw new Error(`Empty response from weather service for ${city}`);
+    }
+    
+    // 尝试解析JSON
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch (parseError) {
+      // 如果JSON解析失败，尝试使用备用API
+      console.warn(`JSON解析失败，尝试备用API...`);
+      return await fetchWeatherFallback(city);
+    }
+    
+    // 验证响应结构
+    if (!json.data) {
+      // 如果wttr.in返回空数据，使用备用API
+      console.warn(`wttr.in返回空数据，使用备用天气API...`);
+      return await fetchWeatherFallback(city);
+    }
+    
+    if (!json.data.current_condition || !Array.isArray(json.data.current_condition)) {
+      // 如果数据格式无效，使用备用API
+      console.warn(`wttr.in数据格式无效，使用备用天气API...`);
+      return await fetchWeatherFallback(city);
+    }
+    
+    return json.data as WeatherData;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Weather service error: ${error.message}`);
+    }
+    throw new Error('Unknown weather service error');
   }
+}
+
+// 备用天气API（使用 Open-Meteo，免费无需API Key）
+async function fetchWeatherFallback(city: string): Promise<WeatherData> {
+  // 首先尝试使用地理坐标
+  // 这里简化处理：使用北京坐标作为默认
+  const lat = 39.9042;
+  const lon = 116.4074;
   
-  const json = await response.json() as WttrResponse;
-  return json.data;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`备用API失败: ${response.statusText}`);
+    }
+    
+    const data = await response.json() as any;
+    
+    // 转换为 wttr.in 格式
+    const current = data.current;
+    const weatherData: WeatherData = {
+      current_condition: [{
+        temp_C: String(current.temperature_2m),
+        humidity: String(current.relative_humidity_2m),
+        weatherDesc: [{ value: getWeatherDescription(current.weather_code) }],
+        windspeedKmph: String(current.wind_speed_10m),
+        FeelsLikeC: String(current.temperature_2m), // 简化：体感温度等于实际温度
+        uvIndex: "0", // Open-Meteo 当前API不提供UV指数
+      }],
+    };
+    
+    return weatherData;
+  } catch (error) {
+    throw new Error(`备用天气服务也失败: ${error instanceof Error ? error.message : '未知错误'}`);
+  }
+}
+
+// 天气代码转换为描述
+function getWeatherDescription(code: number): string {
+  const descriptions: Record<number, string> = {
+    0: '晴天',
+    1: '大部晴天',
+    2: '局部多云',
+    3: '多云',
+    45: '雾',
+    48: '雾凇',
+    51: '小毛毛雨',
+    53: '中毛毛雨',
+    55: '大毛毛雨',
+    61: '小雨',
+    63: '中雨',
+    65: '大雨',
+    71: '小雪',
+    73: '中雪',
+    75: '大雪',
+    77: '雪粒',
+    80: '小阵雨',
+    81: '中阵雨',
+    82: '大阵雨',
+    85: '小阵雪',
+    86: '大阵雪',
+    95: '雷暴',
+    96: '雷暴伴小冰雹',
+    99: '雷暴伴大冰雹',
+  };
+  
+  return descriptions[code] || '未知天气';
 }
 
 function formatWeather(data: WeatherData, city: string): string {
@@ -95,9 +207,17 @@ program
 program
   .argument('[city]', 'City name to query weather for')
   .action(async (city: string) => {
-    const targetCity = city || 'Beijing';
+    const inputCity = city || 'Beijing';
     
     try {
+      // 智能解析城市名称（支持中英文）
+      console.log(chalk.blue(`Resolving city: ${inputCity}...`));
+      const targetCity = await resolveCity(inputCity);
+      
+      if (targetCity !== inputCity) {
+        console.log(chalk.green(`Resolved to: ${targetCity}`));
+      }
+      
       console.log(chalk.blue(`Fetching weather for ${targetCity}...`));
       const weatherData = await fetchWeather(targetCity);
       const formatted = formatWeather(weatherData, targetCity);
@@ -107,7 +227,7 @@ program
         if (error.message.includes('Failed to fetch')) {
           console.error(chalk.red('Error: Could not connect to weather service. Please check your internet connection.'));
         } else if (error.message.includes('404')) {
-          console.error(chalk.red(`Error: City "${targetCity}" not found. Please check the spelling.`));
+          console.error(chalk.red(`Error: City "${inputCity}" not found. Please check the spelling.`));
         } else {
           console.error(chalk.red(`Error: ${error.message}`));
         }
