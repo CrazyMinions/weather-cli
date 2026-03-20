@@ -142,7 +142,7 @@ function getWeatherDescription(code: number): string {
   return descriptions[code] || '未知天气';
 }
 
-function formatWeather(data: WeatherData, city: string): string {
+function formatWeather(data: WeatherData, city: string, unit: string = 'metric', days: number = 3, advanced: boolean = false): string {
   const current = data.current_condition[0];
   
   const temp = current.temp_C;
@@ -152,11 +152,34 @@ function formatWeather(data: WeatherData, city: string): string {
   const windSpeed = current.windspeedKmph;
   const uvIndex = current.uvIndex;
 
+  // 单位转换函数
+  const convertTemp = (celsius: number): number => {
+    if (unit === 'imperial') {
+      return Math.round((celsius * 9/5) + 32);
+    }
+    return celsius;
+  };
+  
+  const convertWind = (kmh: number): number => {
+    if (unit === 'imperial') {
+      return Math.round(kmh * 0.621371);
+    }
+    return kmh;
+  };
+  
+  const tempUnit = unit === 'imperial' ? '°F' : '°C';
+  const windUnit = unit === 'imperial' ? 'mph' : 'km/h';
+  
   // 定义常用颜色别名（可扩展）
   const title = chalk.bold.cyan;
   const label = chalk.gray;
   const value = chalk.white;
-  const tempColor = (t: number) => (t > 30 ? chalk.red : t < 5 ? chalk.blue : chalk.yellow)(`${t}°C`);
+  const tempColor = (t: number) => {
+    const convertedTemp = convertTemp(t);
+    const tempThreshold = unit === 'imperial' ? 86 : 30; // 30°C = 86°F
+    const lowThreshold = unit === 'imperial' ? 41 : 5;   // 5°C = 41°F
+    return (convertedTemp > tempThreshold ? chalk.red : convertedTemp < lowThreshold ? chalk.blue : chalk.yellow)(`${convertedTemp}${tempUnit}`);
+  };
   const uvColor = (uv: string) => {
     const u = parseInt(uv);
     if (u >= 8) return chalk.red(uv);
@@ -184,8 +207,9 @@ function formatWeather(data: WeatherData, city: string): string {
   lines.push(title('├─────────────────────────────┤'));
 
   // 湿度 + 风速（一行两列）
+  const convertedWindSpeed = convertWind(parseFloat(windSpeed));
   const humidityStr = `💧 湿度 ${chalk.cyan(humidity.padStart(2))}%`;
-  const windStr = `🌬️ 风速 ${chalk.cyan(windSpeed.padStart(3))} km/h`;
+  const windStr = `🌬️ 风速 ${chalk.cyan(convertedWindSpeed.toString().padStart(3))} ${windUnit}`;
   lines.push(`│  ${humidityStr.padEnd(18)} ${windStr.padEnd(16)}│`);
 
   // UV指数单独一行（可扩展更多指标）
@@ -202,12 +226,21 @@ const program = new Command();
 program
   .name('weather-cli')
   .description('CLI weather query tool')
-  .version('1.0.0');
+  .version('1.0.0')
+  .option('--unit <unit>', 'Unit system: imperial (°F, mph) or metric (°C, km/h)', 'metric')
+  .option('--days <days>', 'Number of forecast days (1-5)', '3')
+  .option('--advanced', 'Show advanced metrics (sunrise, sunset, pressure, etc.)', false);
 
 program
   .argument('[city]', 'City name to query weather for')
   .action(async (city: string) => {
     const inputCity = city || 'Beijing';
+    const options = program.opts();
+    
+    // 验证参数
+    const unit = options.unit === 'imperial' ? 'imperial' : 'metric';
+    const days = Math.min(5, Math.max(1, parseInt(options.days) || 3));
+    const advanced = options.advanced;
     
     try {
       // 智能解析城市名称（支持中英文）
@@ -220,7 +253,7 @@ program
       
       console.log(chalk.blue(`Fetching weather for ${targetCity}...`));
       const weatherData = await fetchWeather(targetCity);
-      const formatted = formatWeather(weatherData, targetCity);
+      const formatted = formatWeather(weatherData, targetCity, unit, days, advanced);
       console.log('\n' + formatted);
     } catch (error) {
       if (error instanceof Error) {
