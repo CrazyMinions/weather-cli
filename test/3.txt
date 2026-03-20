@@ -1,0 +1,144 @@
+因为中文字符在终端中通常占用**两个英文字符宽度**，而 JavaScript 的 `String.prototype.padEnd` / `padStart` 只按字符数计算长度，导致文字实际显示宽度不一致，边框错位。另外，emoji 和特殊符号的宽度也因终端而异，进一步影响对齐。
+
+要解决这个问题，需要引入一个能正确测量字符串**显示宽度**的库（如 [`string-width`](https://www.npmjs.com/package/string-width)），然后手动计算填充空格，确保每一行内容的总宽度固定。
+
+以下是改进后的 `formatWeather` 函数（假设你已经安装了 `string-width`）：
+
+```bash
+npm install string-width
+```
+
+修改后的代码（关键部分）：
+
+```typescript
+import stringWidth from 'string-width';
+
+// 辅助函数：生成固定宽度的行，左右自动填充空格
+function fixedLine(leftPart: string, rightPart = '', totalWidth = 31): string {
+  const leftWidth = stringWidth(leftPart);
+  const rightWidth = stringWidth(rightPart);
+  const spaces = totalWidth - leftWidth - rightWidth;
+  // 如果内容超出宽度，截断（可选）
+  if (spaces < 0) {
+    // 简单处理：去掉右侧部分或截断左侧
+    return `│${leftPart.slice(0, totalWidth - 2)}│`;
+  }
+  return `│${leftPart}${' '.repeat(spaces)}${rightPart}│`;
+}
+
+// 生成带左边框的行（右侧不留内容）
+function leftLine(content: string, totalWidth = 31): string {
+  const contentWidth = stringWidth(content);
+  const spaces = totalWidth - contentWidth;
+  return `│${content}${' '.repeat(spaces)}│`;
+}
+
+function formatWeather(data: WeatherData, city: string, unit: string = 'metric', days: number = 3, advanced: boolean = false): string {
+  // ... 前面的变量定义保持不变（temp, feelsLike, humidity, description 等）
+  
+  // 定义边框宽度（不包含左右竖线本身，竖线算1个字符，所以总宽度 = 边框宽度 + 2）
+  const innerWidth = 31; // 内容区域宽度，可根据需要调整
+  
+  const lines: string[] = [];
+
+  // 顶部边框
+  lines.push(chalk.bold.cyan('┌' + '─'.repeat(innerWidth) + '┐'));
+
+  // 标题行：居中显示城市名和"实时天气"
+  const titleContent = `📍 ${chalk.bold(city)}  ·  实时天气`;
+  const titleWidth = stringWidth(titleContent);
+  const leftPadding = Math.floor((innerWidth - titleWidth) / 2);
+  const rightPadding = innerWidth - titleWidth - leftPadding;
+  lines.push(chalk.bold.cyan(`│${' '.repeat(leftPadding)}${titleContent}${' '.repeat(rightPadding)}│`));
+
+  // 分隔线
+  lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
+
+  // 天气行：图标 + 描述 + 温度 + 体感温度
+  const weatherIcon = description.includes('晴') ? '☀️' :
+                      description.includes('云') ? '☁️' :
+                      description.includes('雨') ? '🌧️' : '🌈';
+  const descPart = `${weatherIcon} ${chalk.cyan(description)}`;
+  const tempPart = `${tempColor(parseInt(temp))}`;
+  const feelsPart = `体感 ${tempColor(parseInt(feelsLike))}`;
+  const mainLine = `${descPart}  ${tempPart} (${feelsPart})`;
+  lines.push(leftLine(mainLine, innerWidth));
+
+  // 分隔线
+  lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
+
+  // 湿度 + 风速（一行两列）
+  const convertedWindSpeed = convertWind(parseFloat(windSpeed));
+  const humidityStr = `💧 湿度 ${chalk.cyan(humidity)}%`;
+  const windStr = `🌬️ 风速 ${chalk.cyan(convertedWindSpeed)} ${windUnit}`;
+  // 用 fixedLine 将两部分分别放在左右两侧
+  lines.push(fixedLine(humidityStr, windStr, innerWidth));
+
+  // UV 指数
+  const uvStr = `☀️ UV指数 ${uvColor(uvIndex)} (${uvIndex})`;
+  lines.push(leftLine(uvStr, innerWidth));
+
+  if (advanced) {
+    // 高级指标分隔线
+    lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
+    lines.push(leftLine('📈 高级指标', innerWidth));
+
+    // 日出日落（左右排列）
+    const sunriseStr = `🌅 日出 ${chalk.cyan(sunrise)}`;
+    const sunsetStr = `🌇 日落 ${chalk.cyan(sunset)}`;
+    lines.push(fixedLine(sunriseStr, sunsetStr, innerWidth));
+
+    // 气压和降水概率（左右排列）
+    const pressureStr = `📊 气压 ${chalk.cyan(pressure)} hPa`;
+    const rainStr = `🌧️ 降水 ${chalk.cyan(chanceOfRain)}%`;
+    lines.push(fixedLine(pressureStr, rainStr, innerWidth));
+
+    // 能见度单独一行（也可以和别的一起，但这里单独）
+    const visStr = `👁️ 能见度 ${chalk.cyan(visibility)} km`;
+    lines.push(leftLine(visStr, innerWidth));
+  }
+
+  if (data.weather && data.weather.length > 1) {
+    lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
+    lines.push(leftLine(`📅 未来${days}天预报`, innerWidth));
+
+    const maxDays = Math.min(days, data.weather.length);
+    for (let i = 1; i < maxDays; i++) {
+      const dayWeather = data.weather[i];
+      const date = new Date(dayWeather.date);
+      const dayName = date.toLocaleDateString('zh-CN', { weekday: 'short' });
+      const maxTemp = dayWeather.maxtempC || 'N/A';
+      const minTemp = dayWeather.mintempC || 'N/A';
+      const tempRange = `${minTemp}°C ~ ${maxTemp}°C`;
+      const weatherDesc = dayWeather.hourly?.[0]?.weatherDesc?.[0]?.value || '未知';
+
+      // 每行显示：星期、天气、温度范围
+      const forecastLine = `${dayName.padEnd(4)} │ ${chalk.cyan(weatherDesc.padEnd(6))} │ ${chalk.yellow(tempRange)}`;
+      lines.push(leftLine(forecastLine, innerWidth));
+    }
+  }
+
+  // 底部边框
+  lines.push(chalk.bold.cyan('└' + '─'.repeat(innerWidth) + '┘'));
+
+  return lines.join('\n');
+}
+```
+
+### 主要改动
+
+1. **引入了 `string-width`**：正确测量中文字符、emoji 的显示宽度。
+2. **使用 `fixedLine` 和 `leftLine` 辅助函数**：自动计算需要填充的空格数量，保证每行内容总宽度一致。
+3. **固定内宽 `innerWidth`**：边框内部的宽度设为 31，所有内容行（不含左右竖线）的显示宽度均等于该值。
+4. **居中和左右对齐**：标题行居中，湿度/风速、日出/日落等行左右对齐。
+5. **减少硬编码的固定长度**：避免使用 `padEnd(18)` 这种无法适应中文字符的写法。
+
+### 其他建议
+
+- 如果希望边框更美观，可以使用 [`boxen`](https://www.npmjs.com/package/boxen) 库自动绘制边框，但会增加依赖。
+- 注意 `stringWidth` 需要处理颜色代码（chalk 生成的 ANSI 转义码不会影响实际显示宽度，`string-width` 会自动忽略它们）。
+- 如果城市名过长导致标题行超出内宽，可以截断或缩小字体（但一般城市名不会太长）。
+
+将上述代码替换原 `formatWeather` 函数，并安装 `string-width`，运行效果将更加整齐。
+
+如果还有具体对齐问题（如某些行仍然错位），可以调整 `innerWidth` 的值，或检查某些特殊字符的宽度（例如某些终端的 emoji 宽度可能不同）。
