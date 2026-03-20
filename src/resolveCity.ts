@@ -27,9 +27,9 @@ async function geocodeWithBaidu(city: string): Promise<string | null> {
     
     if (data.result) {
       const addressComponent = data.result.addressComponent || {};
-      const cityName = addressComponent.city || 
+      const cityName = (addressComponent.city || 
                       data.result.formatted_address?.split(' ')[0] || 
-                      null;
+                      null)?.replace(/市$/, '');
       return cityName;
     }
     

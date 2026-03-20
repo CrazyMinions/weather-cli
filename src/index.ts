@@ -217,8 +217,8 @@ const cityAdcodes: Record<string, string> = {
   'nanning': '450100', '南宁': '450100',
   'haikou': '460100', '海口': '460100',
   'taipei': '710000', '台北': '710000',
-  'hongkong': '810000', '香港': '810000',
-  'macau': '820000', '澳门': '820000',
+  // 'hongkong': '810000', '香港': '810000',  // 港澳使用国际城市API（高德不支持）
+  // 'macau': '820000', '澳门': '820000',
   'suzhou': '320500', '苏州': '320500',
   'wuxi': '320200', '无锡': '320200',
   'ningbo': '330200', '宁波': '330200',
@@ -455,9 +455,9 @@ const cityCoordinates: Record<string, { lat: number; lon: number }> = {
 
 // ==================== 工具函数 ====================
 
-function getCityAdcode(city: string): string {
+function getCityAdcode(city: string): string | null {
   const normalized = city.toLowerCase().replace(/\s+/g, '');
-  return cityAdcodes[normalized] || '110000';
+  return cityAdcodes[normalized] || null;
 }
 
 function getInternationalCity(city: string): { lat: number; lon: number; name: string } | null {
@@ -529,7 +529,7 @@ function localizeErrorMessage(errorMsg: string): string {
 
   const translations: Record<string, string> = {
     // 网络错误
-    'Failed to fetch': '无法连接到天气服务，请检查网络连接和代理设置',
+    'Failed to fetch': '无法连接到天气服务，请检查网络连接',
     'ECONNREFUSED': '网络连接被拒绝',
     'ECONNRESET': '网络连接被重置',
     'ETIMEDOUT': '网络连接超时',
@@ -614,6 +614,9 @@ async function fetchGaodeWeather(city: string): Promise<WeatherData> {
   }
 
   const adcode = getCityAdcode(city);
+  if (adcode === null) {
+    throw new Error(`未知城市: ${city}`);
+  }
   const baseUrl = 'https://restapi.amap.com/v3/weather/weatherInfo';
   
   
@@ -839,14 +842,20 @@ async function fetchWeather(city: string, useCache: boolean = true): Promise<Wea
     }
   }
   
-  // 检查是否是国际城市
-  const intlCity = getInternationalCity(city);
   let data: WeatherData;
   
-  if (intlCity) {
-    data = await fetchOpenMeteoWeather(intlCity.lat, intlCity.lon);
-  } else {
+  // 先检查国内城市（根据6.txt建议#1：优先使用高德API）
+  const adcode = getCityAdcode(city);
+  if (adcode !== null) {
     data = await fetchGaodeWeather(city);
+  } else {
+    // 检查国际城市
+    const intlCity = getInternationalCity(city);
+    if (intlCity) {
+      data = await fetchOpenMeteoWeather(intlCity.lat, intlCity.lon);
+    } else {
+      throw new Error(`未知城市: ${city}`);
+    }
   }
   
   // 存入缓存

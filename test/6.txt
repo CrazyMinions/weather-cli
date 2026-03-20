@@ -1,0 +1,60 @@
+### ⚠️ 潜在问题 & 改进建议
+
+#### 1. 国际城市映射与国内 adcode 冲突
+`香港`、`澳门` 等城市同时出现在 `cityAdcodes`（国内）和 `internationalCities`（国际）中。  
+`fetchWeather` 会优先判断 `getInternationalCity`，导致这些城市使用 Open-Meteo 而非高德 API。  
+- **建议**：明确区分，或统一使用高德（因为国内城市高德数据更准确）。可以修改 `fetchWeather` 逻辑：若城市在国内映射中存在，即使在国际列表中也优先用高德。
+
+```ts
+// 在 fetchWeather 中
+const adcode = getCityAdcode(city);
+if (adcode !== '110000' || getInternationalCity(city)) {
+  // 如果 adcode 有效（非默认北京）则视为国内城市
+  // 注意：默认值 110000 需要特殊处理
+}
+```
+
+#### 2. `getCityAdcode` 默认返回 `'110000'` 可能误导
+当城市不在映射表中时，返回北京 adcode，但后续仍会调用高德 API 查询北京天气，可能不符合预期。  
+- **建议**：改为返回 `null`，并在调用处根据返回值决定是否使用高德 API。
+
+#### 3. `parseWindPower` 对纯数字字符串解析错误
+如果 `windpower` 值为 `'3'`（无“级”字），正则匹配不到数字，返回 `'0级'`。  
+- **改进**：
+```ts
+function parseWindPower(power: string): string {
+  const match = power.match(/(\d+)/);
+  const level = match ? match[1] : '0';
+  return `${level}级`;
+}
+```
+
+#### 4. 空气质量数据获取依赖坐标，但部分城市可能无对应坐标
+`cityCoordinates` 中缺少某些地级市，国际城市虽有坐标但空气质量 API 可能不可用（Open-Meteo 空气数据覆盖全球，但部分区域无数据）。  
+- **建议**：在 `fetchAirQuality` 中增加重试或备用方案，若失败则静默返回 `null`。
+
+#### 5. `--wallpaper` 模式忽略了 `--hourly` / `--aqi` 等选项
+当前壁纸模式只显示当前天气，其他选项被忽略。可以考虑：
+- 在壁纸模式下也支持 `--aqi` 显示空气质量。
+- 或文档说明壁纸模式仅显示核心信息。
+
+#### 6. 缓存键生成可能不唯一
+`getCacheKey` 使用 `cityAdcodes` 时，若城市名是拼音 `'beijing'`，可以匹配到 `'110000'`，但若用户输入 `'北京'` 也匹配到相同 adcode，缓存键一致，没问题。  
+但国际城市用坐标四舍五入到两位小数，可能两个邻近城市共享同一缓存键（概率极低，可忽略）。
+
+#### 7. 环境变量未配置时的提示友好
+如果未配置高德 API Key，`fetchGaodeWeather` 会抛出错误，错误消息经 `localizeErrorMessage` 处理后可能不够具体。可以增加更明确的提示。
+
+#### 8. 百度地理编码 API 返回的城市名可能包含“市”字
+`addressComponent.city` 返回如 `"北京市"`，而 `cityAdcodes` 中的 key 是 `"北京"`，直接用于 `fetchWeather` 会导致无法匹配。  
+- **建议**：对解析结果进行归一化（去掉“市”后缀）。
+
+#### 9. 单元测试覆盖
+虽然导出了部分函数，但未提供测试文件。建议补充测试，尤其是核心函数如 `parseWindPower`、`getCityAdcode`、`localizeErrorMessage` 等。
+
+---
+
+### 🧪 可选增强
+- **支持更多国际城市**：通过 Open-Meteo 的自动地理编码，可以动态查询，无需预定义映射表。
+- **显示日出日落**：Open-Meteo 返回数据中包含 `sunrise`/`sunset`，可以添加到显示中。
+- **天气预警**：高德 API 支持预警信息，可以集成 `extensions=all` 中的 `forecast` 字段（目前未使用预警部分）。

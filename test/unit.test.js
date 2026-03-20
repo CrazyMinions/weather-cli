@@ -35,6 +35,13 @@ try {
   console.log('  ✗ 失败:', e.message);
 }
 
+try {
+  assert.strictEqual(parseWindPower('3'), '3级');
+  console.log('  ✓ parseWindPower("3") = "3级" (纯数字)');
+} catch (e) {
+  console.log('  ✗ 失败:', e.message);
+}
+
 // localizeErrorMessage 测试
 console.log('\n🔬 测试 localizeErrorMessage:');
 try {
@@ -91,6 +98,30 @@ try {
   const result = getCityAdcode('上海');
   assert.strictEqual(result, '310000');
   console.log('  ✓ getCityAdcode("上海") = "310000"');
+} catch (e) {
+  console.log('  ✗ 失败:', e.message);
+}
+
+try {
+  const result = getCityAdcode(' unknown city ');
+  assert.strictEqual(result, null);
+  console.log('  ✓ getCityAdcode(" unknown city ") = null (未知城市+空格)');
+} catch (e) {
+  console.log('  ✗ 失败:', e.message);
+}
+
+try {
+  const result = getCityAdcode('NEWYORK');
+  assert.strictEqual(result, null);
+  console.log('  ✓ getCityAdcode("NEWYORK") = null (未知城市大写)');
+} catch (e) {
+  console.log('  ✗ 失败:', e.message);
+}
+
+try {
+  const result = getCityAdcode(' 北 京 '); // 有空格但可规范化
+  assert.strictEqual(result, '110000');
+  console.log('  ✓ getCityAdcode(" 北 京 ") = "110000" (带空格但可匹配)');
 } catch (e) {
   console.log('  ✗ 失败:', e.message);
 }
