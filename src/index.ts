@@ -1114,6 +1114,16 @@ function formatWeather(data: WeatherData, city: string, options: {
   
   // JSON输出
   if (json) {
+    // 确定起始索引：从索引1开始（跳过今天），除非没有足够数据
+    const startIdx = data.weather.length > days ? 1 : 0;
+    const forecastData = data.weather.slice(startIdx, startIdx + days).map(d => ({
+      date: d.date,
+      dayWeather: d.dayweather,
+      nightWeather: d.nightweather,
+      maxTemp: parseInt(d.maxtempC),
+      minTemp: parseInt(d.mintempC),
+    }));
+    
     return JSON.stringify({
       city,
       current: {
@@ -1124,13 +1134,7 @@ function formatWeather(data: WeatherData, city: string, options: {
         windDirection,
         reportTime: current.reportTime,
       },
-      forecast: data.weather.slice(0, days).map(d => ({
-        date: d.date,
-        dayWeather: d.dayweather,
-        nightWeather: d.nightweather,
-        maxTemp: parseInt(d.maxtempC),
-        minTemp: parseInt(d.mintempC),
-      })),
+      forecast: forecastData,
       hourly: data.hourly,
     }, null, 2);
   }
@@ -1244,9 +1248,12 @@ function formatWeather(data: WeatherData, city: string, options: {
       style: { head: ['cyan'] },
     });
     
-    const maxDays = Math.min(days, data.weather.length);
+    // 确定起始索引：从索引1开始（跳过今天），除非没有足够数据
+    const startIdx = data.weather.length > days ? 1 : 0;
+    const maxDays = Math.min(days, data.weather.length - startIdx);
+    
     for (let i = 0; i < maxDays; i++) {
-      const d = data.weather[i];
+      const d = data.weather[startIdx + i];
       const dateStr = d.date.slice(5);
       const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
       const week = weekDays[(parseInt(d.week) - 1) % 7] || d.week;
