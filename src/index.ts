@@ -4,6 +4,16 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { resolveCity } from './resolveCity.js';
 import stringWidth from 'string-width';
+import boxen from 'boxen';
+import Gradient from 'gradient-string';
+import Table from 'cli-table3';
+import ora from 'ora';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+// 高德天气API Key
+const GAODE_API_KEY = process.env.GAODE_MAP_API_KEY || '';
 
 interface WeatherData {
   current_condition: Array<{
@@ -15,162 +25,192 @@ interface WeatherData {
     uvIndex: string;
     pressure: string;
     visibility: string;
+    windDirection: string;
   }>;
   weather: Array<{
     date: string;
+    week: string;
     maxtempC: string;
     mintempC: string;
-    astronomy: Array<{
-      sunrise: string;
-      sunset: string;
-    }>;
-    hourly: Array<{
-      chanceofrain: string;
-      weatherDesc: Array<{ value: string }>;
-    }>;
+    dayweather: string;
+    nightweather: string;
+    daywind: string;
+    nightwind: string;
+    daypower: string;
+    nightpower: string;
   }>;
 }
 
-interface WttrResponse {
-  data: WeatherData;
+// 城市名称到高德adcode的映射（常用城市）
+const cityAdcodes: Record<string, string> = {
+  'beijing': '110000',
+  '北京': '110000',
+  'shanghai': '310000',
+  '上海': '310000',
+  'guangzhou': '440100',
+  '广州': '440100',
+  'shenzhen': '440300',
+  '深圳': '440300',
+  'chengdu': '510100',
+  '成都': '510100',
+  'hangzhou': '330100',
+  '杭州': '330100',
+  'wuhan': '420100',
+  '武汉': '420100',
+  'xian': '610100',
+  '西安': '610100',
+  'nanjing': '320100',
+  '南京': '320100',
+  'tianjin': '120000',
+  '天津': '120000',
+  'chongqing': '500000',
+  '重庆': '500000',
+  'changsha': '430100',
+  '长沙': '430100',
+  'kunming': '530100',
+  '昆明': '530100',
+  'xiamen': '350200',
+  '厦门': '350200',
+  'qingdao': '370200',
+  '青岛': '370200',
+  'dalian': '210200',
+  '大连': '210200',
+  'shenyang': '210100',
+  '沈阳': '210100',
+  'harbin': '230100',
+  '哈尔滨': '230100',
+  'changchun': '220100',
+  '长春': '220100',
+  'zhengzhou': '410100',
+  '郑州': '410100',
+  'jinan': '370100',
+  '济南': '370100',
+  'fuzhou': '350100',
+  '福州': '350100',
+  'hefei': '340100',
+  '合肥': '340100',
+  'nanchang': '360100',
+  '南昌': '360100',
+  'guiyang': '520100',
+  '贵阳': '520100',
+  'lanzhou': '620100',
+  '兰州': '620100',
+  'yinchuan': '640100',
+  '银川': '640100',
+  'xining': '630100',
+  '西宁': '630100',
+  'hohhot': '150100',
+  '呼和浩特': '150100',
+  'urumqi': '650100',
+  '乌鲁木齐': '650100',
+  'lasa': '540100',
+  '拉萨': '540100',
+  'nanning': '450100',
+  '南宁': '450100',
+  'haikou': '460100',
+  '海口': '460100',
+  'taipei': '710000',
+  '台北': '710000',
+  'hongkong': '810000',
+  '香港': '810000',
+  'macau': '820000',
+  '澳门': '820000',
+};
+
+// 获取城市的adcode
+function getCityAdcode(city: string): string {
+  const lowerCity = city.toLowerCase();
+  return cityAdcodes[lowerCity] || '110000'; // 默认北京
+}
+
+// 风力级别转换（高德返回"≤3"、"4-5"等格式）
+function parseWindPower(power: string): number {
+  const match = power.match(/(\d+)/);
+  return match ? parseInt(match[1]) : 3;
 }
 
 async function fetchWeather(city: string): Promise<WeatherData> {
-  // 使用 wttr.in 的简化JSON格式（更可靠）
-  const url = `https://wttr.in/${encodeURIComponent(city)}?format=j1`;
-  
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch weather for ${city}: ${response.statusText}`);
-    }
-    
-    const text = await response.text();
-    
-    // wttr.in 有时返回空响应或非JSON响应
-    if (!text || text.trim() === '') {
-      throw new Error(`Empty response from weather service for ${city}`);
-    }
-    
-    // 尝试解析JSON
-    let json: any;
-    try {
-      json = JSON.parse(text);
-    } catch (parseError) {
-      // 如果JSON解析失败，尝试使用备用API
-      console.warn(`JSON解析失败，尝试备用API...`);
-      return await fetchWeatherFallback(city);
-    }
-    
-    // 验证响应结构
-    if (!json.data) {
-      // 如果wttr.in返回空数据，使用备用API
-      console.warn(`wttr.in返回空数据，使用备用天气API...`);
-      return await fetchWeatherFallback(city);
-    }
-    
-    if (!json.data.current_condition || !Array.isArray(json.data.current_condition)) {
-      // 如果数据格式无效，使用备用API
-      console.warn(`wttr.in数据格式无效，使用备用天气API...`);
-      return await fetchWeatherFallback(city);
-    }
-    
-    return json.data as WeatherData;
-  } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`Weather service error: ${error.message}`);
-    }
-    throw new Error('Unknown weather service error');
+  if (!GAODE_API_KEY || GAODE_API_KEY === 'your_gaode_map_api_key_here') {
+    throw new Error('请在 .env 文件中配置高德天气API Key (GAODE_MAP_API_KEY)');
   }
-}
 
-// 备用天气API（使用 Open-Meteo，免费无需API Key）
-async function fetchWeatherFallback(city: string): Promise<WeatherData> {
-  // 首先尝试使用地理坐标
-  // 这里简化处理：使用北京坐标作为默认
-  const lat = 39.9042;
-  const lon = 116.4074;
+  const adcode = getCityAdcode(city);
   
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
+  // 同时请求实况天气和预报天气
+  const baseUrl = 'https://restapi.amap.com/v3/weather/weatherInfo';
+  const liveUrl = `${baseUrl}?city=${adcode}&key=${GAODE_API_KEY}&extensions=base&output=JSON`;
+  const forecastUrl = `${baseUrl}?city=${adcode}&key=${GAODE_API_KEY}&extensions=all&output=JSON`;
   
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`备用API失败: ${response.statusText}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    
+    // 并发请求实况和预报
+    const [liveResponse, forecastResponse] = await Promise.all([
+      fetch(liveUrl, { signal: controller.signal }),
+      fetch(forecastUrl, { signal: controller.signal }),
+    ]);
+    
+    clearTimeout(timeout);
+    
+    if (!liveResponse.ok || !forecastResponse.ok) {
+      throw new Error(`高德天气API请求失败`);
     }
     
-    const data = await response.json() as any;
+    const liveData = await liveResponse.json() as any;
+    const forecastData = await forecastResponse.json() as any;
     
-    // 转换为 wttr.in 格式
-    const current = data.current;
+    // 检查API返回状态
+    if (liveData.status !== '1') {
+      throw new Error(`高德天气API错误: ${liveData.info}`);
+    }
+    if (forecastData.status !== '1') {
+      throw new Error(`高德天气API错误: ${forecastData.info}`);
+    }
+    
+    // 解析实况天气
+    const live = liveData.lives[0];
+    
+    // 解析预报天气
+    const forecasts = forecastData.forecasts[0];
+    const casts = forecasts.casts || [];
+    
+    // 构建weather数组（多日预报）
+    const weatherArray = casts.map((cast: any) => ({
+      date: cast.date,
+      week: cast.week,
+      maxtempC: cast.daytemp,
+      mintempC: cast.nighttemp,
+      dayweather: cast.dayweather,
+      nightweather: cast.nightweather,
+      daywind: cast.daywind,
+      nightwind: cast.nightwind,
+      daypower: cast.daypower,
+      nightpower: cast.nightpower,
+    }));
+    
     const weatherData: WeatherData = {
       current_condition: [{
-        temp_C: String(current.temperature_2m),
-        humidity: String(current.relative_humidity_2m),
-        weatherDesc: [{ value: getWeatherDescription(current.weather_code) }],
-        windspeedKmph: String(current.wind_speed_10m),
-        FeelsLikeC: String(current.temperature_2m), // 简化：体感温度等于实际温度
-        uvIndex: "0", // Open-Meteo 当前API不提供UV指数
-        pressure: "1013", // Open-Meteo 当前API不提供气压，使用默认值
-        visibility: "10", // Open-Meteo 当前API不提供能见度，使用默认值
+        temp_C: live.temperature,
+        humidity: live.humidity,
+        weatherDesc: [{ value: live.weather }],
+        windspeedKmph: String(parseWindPower(live.windpower) * 5), // 转换为大致km/h
+        FeelsLikeC: live.temperature, // 高德不提供体感温度，使用实际温度
+        uvIndex: '0', // 高德不提供UV指数
+        pressure: '1013', // 高德不提供气压
+        visibility: '10', // 高德不提供能见度
+        windDirection: live.winddirection,
       }],
-      weather: [{
-        date: new Date().toISOString().split('T')[0],
-        maxtempC: String(current.temperature_2m + 5), // 估算最高温度
-        mintempC: String(current.temperature_2m - 5), // 估算最低温度
-        astronomy: [{
-          sunrise: "06:29 AM", // 默认日出时间
-          sunset: "06:25 PM", // 默认日落时间
-        }],
-        hourly: [{
-          chanceofrain: "0", // 默认无降水概率
-          weatherDesc: [{ value: getWeatherDescription(current.weather_code) }],
-        }],
-      }],
+      weather: weatherArray,
     };
     
     return weatherData;
   } catch (error) {
-    throw new Error(`备用天气服务也失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    if (error instanceof Error) {
+      throw new Error(`高德天气服务错误: ${error.message}`);
+    }
+    throw new Error('未知的天气服务错误');
   }
-}
-
-// 天气代码转换为描述
-function getWeatherDescription(code: number): string {
-  const descriptions: Record<number, string> = {
-    0: '晴天',
-    1: '大部晴天',
-    2: '局部多云',
-    3: '多云',
-    45: '雾',
-    48: '雾凇',
-    51: '小毛毛雨',
-    53: '中毛毛雨',
-    55: '大毛毛雨',
-    61: '小雨',
-    63: '中雨',
-    65: '大雨',
-    71: '小雪',
-    73: '中雪',
-    75: '大雪',
-    77: '雪粒',
-    80: '小阵雨',
-    81: '中阵雨',
-    82: '大阵雨',
-    85: '小阵雪',
-    86: '大阵雪',
-    95: '雷暴',
-    96: '雷暴伴小冰雹',
-    99: '雷暴伴大冰雹',
-  };
-  
-  return descriptions[code] || '未知天气';
 }
 
 // 辅助函数：生成固定宽度的行，左右自动填充空格
@@ -201,23 +241,10 @@ function formatWeather(data: WeatherData, city: string, unit: string = 'metric',
   const current = data.current_condition[0];
   
   const temp = current.temp_C;
-  const feelsLike = current.FeelsLikeC;
   const humidity = current.humidity;
   const description = current.weatherDesc[0]?.value || '未知';
   const windSpeed = current.windspeedKmph;
-  const uvIndex = current.uvIndex;
-  
-  // 高级指标
-  const pressure = current.pressure || 'N/A';
-  const visibility = current.visibility || 'N/A';
-  
-  // 日出日落时间（从当天的weather数据获取）
-  const todayWeather = data.weather && data.weather[0];
-  const sunrise = todayWeather?.astronomy?.[0]?.sunrise || 'N/A';
-  const sunset = todayWeather?.astronomy?.[0]?.sunset || 'N/A';
-  
-  // 降水概率（从第一个hourly数据获取）
-  const chanceOfRain = todayWeather?.hourly?.[0]?.chanceofrain || 'N/A';
+  const windDirection = current.windDirection || '';
 
   // 单位转换函数
   const convertTemp = (celsius: number): number => {
@@ -237,107 +264,98 @@ function formatWeather(data: WeatherData, city: string, unit: string = 'metric',
   const tempUnit = unit === 'imperial' ? '°F' : '°C';
   const windUnit = unit === 'imperial' ? 'mph' : 'km/h';
   
-  // 定义常用颜色别名（可扩展）
-  const title = chalk.bold.cyan;
-  const label = chalk.gray;
-  const value = chalk.white;
+  // 温度颜色
   const tempColor = (t: number) => {
     const convertedTemp = convertTemp(t);
-    const tempThreshold = unit === 'imperial' ? 86 : 30; // 30°C = 86°F
-    const lowThreshold = unit === 'imperial' ? 41 : 5;   // 5°C = 41°F
+    const tempThreshold = unit === 'imperial' ? 86 : 30;
+    const lowThreshold = unit === 'imperial' ? 41 : 5;
     return (convertedTemp > tempThreshold ? chalk.red : convertedTemp < lowThreshold ? chalk.blue : chalk.yellow)(`${convertedTemp}${tempUnit}`);
   };
-  const uvColor = (uv: string) => {
-    const u = parseInt(uv);
-    if (u >= 8) return chalk.red(uv);
-    if (u >= 6) return chalk.yellow(uv);
-    return chalk.green(uv);
-  };
 
-  // 定义边框宽度（不包含左右竖线本身，竖线算1个字符，所以总宽度 = 边框宽度 + 2）
-  const innerWidth = 40; // 内容区域宽度，可根据需要调整
+  // 创建渐变色标题
+  const titleGradient = Gradient(['cyan', 'blue']);
+  const titleBox = boxen(titleGradient(' 🌤️  天气预报  🌤️ '), {
+    padding: { left: 1, right: 1 },
+    borderColor: 'cyan',
+    borderStyle: 'double'
+  });
   
   const lines: string[] = [];
+  lines.push(titleBox);
 
-  // 顶部边框
-  lines.push(chalk.bold.cyan('┌' + '─'.repeat(innerWidth) + '┐'));
-
-  // 标题行：居中显示城市名和“实时天气”
-  const titleContent = `📍 ${chalk.bold(city)}  ·  实时天气`;
-  const titleWidth = stringWidth(titleContent);
-  const leftPadding = Math.floor((innerWidth - titleWidth) / 2);
-  const rightPadding = innerWidth - titleWidth - leftPadding;
-  lines.push(chalk.bold.cyan(`│${' '.repeat(leftPadding)}${titleContent}${' '.repeat(rightPadding)}│`));
-
-  // 分隔线
-  lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
-
-  // 天气行：图标 + 描述 + 温度 + 体感温度
+  // 天气图标
   const weatherIcon = description.includes('晴') ? '☀️' :
                       description.includes('云') ? '☁️' :
-                      description.includes('雨') ? '🌧️' : '🌈';
-  const descPart = `${weatherIcon} ${chalk.cyan(description)}`;
-  const tempPart = `${tempColor(parseInt(temp))}`;
-  const feelsPart = `体感 ${tempColor(parseInt(feelsLike))}`;
-  const mainLine = `${descPart}  ${tempPart} (${feelsPart})`;
-  lines.push(leftLine(mainLine, innerWidth));
-
-  // 分隔线
-  lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
-
-  // 湿度 + 风速（一行两列）
+                      description.includes('雨') ? '🌧️' :
+                      description.includes('雪') ? '❄️' :
+                      description.includes('雾') ? '🌫️' :
+                      description.includes('雷') ? '⛈️' : '🌈';
+  
   const convertedWindSpeed = convertWind(parseFloat(windSpeed));
-  const humidityStr = `💧 湿度 ${chalk.cyan(humidity)}%`;
-  const windStr = `🌬️ 风速 ${chalk.cyan(convertedWindSpeed)} ${windUnit}`;
-  // 用 fixedLine 将两部分分别放在左右两侧
-  lines.push(fixedLine(humidityStr, windStr, innerWidth));
 
-  // UV 指数
-  const uvStr = `☀️ UV指数 ${uvColor(uvIndex)} (${uvIndex})`;
-  lines.push(leftLine(uvStr, innerWidth));
+  // 当前天气卡片
+  const currentLines = [
+    `${weatherIcon}  ${chalk.bold(description)}`,
+    `🌡️ 温度: ${tempColor(parseInt(temp))}`,
+    `💧 湿度: ${chalk.cyan(humidity)}%`,
+    `🌬️ 风向: ${chalk.cyan(windDirection)}   风速: ${chalk.cyan(convertedWindSpeed)} ${windUnit}`
+  ];
+  const currentCard = boxen(currentLines.join('\n'), {
+    padding: 1,
+    borderColor: 'green',
+    borderStyle: 'round',
+    title: '实时天气',
+    titleAlignment: 'center'
+  });
+  lines.push(currentCard);
 
-  if (advanced) {
-    // 高级指标分隔线
-    lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
-    lines.push(leftLine('📈 高级指标', innerWidth));
-
-    // 日出日落（左右排列）
-    const sunriseStr = `🌅 日出 ${chalk.cyan(sunrise)}`;
-    const sunsetStr = `🌇 日落 ${chalk.cyan(sunset)}`;
-    lines.push(fixedLine(sunriseStr, sunsetStr, innerWidth));
-
-    // 气压和降水概率（左右排列）
-    const pressureStr = `📊 气压 ${chalk.cyan(pressure)} hPa`;
-    const rainStr = `🌧️ 降水 ${chalk.cyan(chanceOfRain)}%`;
-    lines.push(fixedLine(pressureStr, rainStr, innerWidth));
-
-    // 能见度单独一行（也可以和别的一起，但这里单独）
-    const visStr = `👁️ 能见度 ${chalk.cyan(visibility)} km`;
-    lines.push(leftLine(visStr, innerWidth));
+  // 高级指标卡片（如果启用）- 显示风力信息
+  if (advanced && data.weather.length > 0) {
+    const todayWeather = data.weather[0];
+    const advancedLines = [
+      `🌅 白天: ${chalk.cyan(todayWeather.dayweather)}   🌇 夜间: ${chalk.cyan(todayWeather.nightweather)}`,
+      `🌬️ 白天风力: ${chalk.cyan(todayWeather.daypower)}级   🌬️ 夜间风力: ${chalk.cyan(todayWeather.nightpower)}级`,
+      `📅 更新时间: ${chalk.cyan(new Date().toLocaleString('zh-CN'))}`
+    ];
+    const advancedCard = boxen(advancedLines.join('\n'), {
+      padding: 1,
+      borderColor: 'yellow',
+      borderStyle: 'round',
+      title: '详细信息',
+      titleAlignment: 'center'
+    });
+    lines.push(advancedCard);
   }
 
+  // 多日预报表格
   if (data.weather && data.weather.length > 1) {
-    lines.push(chalk.bold.cyan('├' + '─'.repeat(innerWidth) + '┤'));
-    lines.push(leftLine(`📅 未来${days}天预报`, innerWidth));
-
+    const table = new Table({
+      head: ['日期', '星期', '白天天气', '夜间天气', '温度范围'],
+      colWidths: [12, 6, 10, 10, 18],
+      style: { head: ['cyan'] }
+    });
     const maxDays = Math.min(days, data.weather.length);
-    for (let i = 1; i < maxDays; i++) {
+    for (let i = 0; i < maxDays; i++) {
       const dayWeather = data.weather[i];
-      const date = new Date(dayWeather.date);
-      const dayName = date.toLocaleDateString('zh-CN', { weekday: 'short' });
-      const maxTemp = dayWeather.maxtempC || 'N/A';
-      const minTemp = dayWeather.mintempC || 'N/A';
-      const tempRange = `${minTemp}°C ~ ${maxTemp}°C`;
-      const weatherDesc = dayWeather.hourly?.[0]?.weatherDesc?.[0]?.value || '未知';
-
-      // 每行显示：星期、天气、温度范围
-      const forecastLine = `${dayName.padEnd(4)} │ ${chalk.cyan(weatherDesc.padEnd(6))} │ ${chalk.yellow(tempRange)}`;
-      lines.push(leftLine(forecastLine, innerWidth));
+      const dateStr = dayWeather.date.slice(5); // MM-DD格式
+      const weekDay = ['日', '一', '二', '三', '四', '五', '六'][parseInt(dayWeather.week) - 1] || dayWeather.week;
+      const maxTempC = parseInt(dayWeather.maxtempC) || 0;
+      const minTempC = parseInt(dayWeather.mintempC) || 0;
+      const displayMaxTemp = convertTemp(maxTempC);
+      const displayMinTemp = convertTemp(minTempC);
+      table.push([
+        dateStr,
+        `周${weekDay}`,
+        dayWeather.dayweather,
+        dayWeather.nightweather,
+        chalk.yellow(`${displayMinTemp}${tempUnit} ~ ${displayMaxTemp}${tempUnit}`)
+      ]);
     }
+    lines.push(table.toString());
   }
 
-  // 底部边框
-  lines.push(chalk.bold.cyan('└' + '─'.repeat(innerWidth) + '┘'));
+  // 数据来源
+  lines.push(chalk.gray('数据来源: 高德地图'));
 
   return lines.join('\n');
 }
@@ -365,15 +383,18 @@ program
     
     try {
       // 智能解析城市名称（支持中英文）
-      console.log(chalk.blue(`Resolving city: ${inputCity}...`));
+      const resolverSpinner = ora(`解析城市: ${inputCity}...`).start();
       const targetCity = await resolveCity(inputCity);
       
       if (targetCity !== inputCity) {
-        console.log(chalk.green(`Resolved to: ${targetCity}`));
+        resolverSpinner.succeed(`已解析为: ${targetCity}`);
+      } else {
+        resolverSpinner.succeed(`城市: ${targetCity}`);
       }
       
-      console.log(chalk.blue(`Fetching weather for ${targetCity}...`));
+      const weatherSpinner = ora(`正在获取 ${targetCity} 天气数据...`).start();
       const weatherData = await fetchWeather(targetCity);
+      weatherSpinner.succeed('天气数据获取成功');
       const formatted = formatWeather(weatherData, targetCity, unit, days, advanced);
       console.log('\n' + formatted);
     } catch (error) {
