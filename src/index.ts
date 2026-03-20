@@ -12,6 +12,7 @@ import NodeCache from 'node-cache';
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
+import stringWidth from 'string-width';
 
 
 dotenv.config();
@@ -766,6 +767,18 @@ async function fetchWithTimeout(url: string, timeoutMs: number = 10000, options:
   }
 }
 
+// 图标格式化：确保图标后添加适当空格以对齐（目标总宽度3个字符）
+function formatIcon(icon: string): string {
+  const iconWidth = stringWidth(icon);
+  // 目标总宽度：图标 + 空格 = 3个字符（假设图标通常为2字符宽）
+  const targetTotalWidth = 3;
+  const spacesNeeded = targetTotalWidth - iconWidth;
+  if (spacesNeeded <= 0) {
+    return icon + ' '; // 至少一个空格
+  }
+  return icon + ' '.repeat(spacesNeeded);
+}
+
 // 天气图标映射
 function getWeatherIcon(description: string): string {
   if (description.includes('晴')) return '☀️';
@@ -1172,10 +1185,10 @@ function formatWeather(data: WeatherData, city: string, options: {
   const icon = getWeatherIcon(description);
   const windLevel = current.windLevel || `${Math.round(parseInt(windSpeed) / 5)}级`;
   const currentCard = boxen([
-    `${icon}  ${chalk.bold(description)}`,
-    `🌡️ 温度: ${tempColor(temp)}`,
-    `💧 湿度: ${chalk.cyan(humidity)}%`,
-    `🌬️ ${windDirection}风  ${chalk.cyan(windLevel)}`,
+    `${formatIcon(icon)}${chalk.bold(description)}`,
+    `${formatIcon('🌡️')}温度: ${tempColor(temp)}`,
+    `${formatIcon('💧')}湿度: ${chalk.cyan(humidity)}%`,
+    `${formatIcon('🌬️')}${windDirection}风  ${chalk.cyan(windLevel)}`,
   ].join('\n'), {
     padding: 1,
     borderColor: 'green',
