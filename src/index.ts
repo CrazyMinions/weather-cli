@@ -32,6 +32,7 @@ interface CurrentCondition {
   visibility: string;
   windDirection: string;
   reportTime: string;
+  windLevel?: string; // 风力等级（如"3级"）
 }
 
 interface DailyForecast {
@@ -168,7 +169,7 @@ const cityAdcodes: Record<string, string> = {
   'chaoyang': '211300', '朝阳': '211300',
   'huludao': '211400', '葫芦岛': '211400',
   'dandong': '210600', '丹东': '210600',
-  'tiefa': '211200', '铁岭': '211200',
+  'tieling': '211200', '铁岭': '211200',
   'chengde': '130800', '承德': '130800',
   'zhangjiakou': '130700', '张家口': '130700',
   'qinhuangdao': '130300', '秦皇岛': '130300',
@@ -275,21 +276,123 @@ const internationalCities: Record<string, { lat: number; lon: number; name: stri
   '多伦多': { lat: 43.6532, lon: -79.3832, name: '多伦多' },
 };
 
+// ==================== 城市坐标映射（用于AQI） ====================
+
+const cityCoordinates: Record<string, { lat: number; lon: number }> = {
+  '北京': { lat: 39.9042, lon: 116.4074 },
+  '上海': { lat: 31.2304, lon: 121.4737 },
+  '广州': { lat: 23.1291, lon: 113.2644 },
+  '深圳': { lat: 22.5431, lon: 114.0579 },
+  '成都': { lat: 30.5728, lon: 104.0668 },
+  '杭州': { lat: 30.2741, lon: 120.1551 },
+  '武汉': { lat: 30.5928, lon: 114.3055 },
+  '西安': { lat: 34.3416, lon: 108.9398 },
+  '南京': { lat: 32.0603, lon: 118.7969 },
+  '天津': { lat: 39.3434, lon: 117.3616 },
+  '重庆': { lat: 29.4316, lon: 106.9123 },
+  '长沙': { lat: 28.2280, lon: 112.9388 },
+  '昆明': { lat: 25.0389, lon: 102.7183 },
+  '厦门': { lat: 24.4798, lon: 118.0894 },
+  '青岛': { lat: 36.0671, lon: 120.3826 },
+  '大连': { lat: 38.9140, lon: 121.6147 },
+  '沈阳': { lat: 41.8057, lon: 123.4315 },
+  '哈尔滨': { lat: 45.8038, lon: 126.5350 },
+  '长春': { lat: 43.8171, lon: 125.3235 },
+  '郑州': { lat: 34.7472, lon: 113.6249 },
+  '济南': { lat: 36.6512, lon: 116.9972 },
+  '福州': { lat: 26.0745, lon: 119.2965 },
+  '合肥': { lat: 31.8206, lon: 117.2272 },
+  '南昌': { lat: 28.6820, lon: 115.8579 },
+  '贵阳': { lat: 26.6470, lon: 106.6302 },
+  '兰州': { lat: 36.0611, lon: 103.8343 },
+  '银川': { lat: 38.4872, lon: 106.2309 },
+  '西宁': { lat: 36.6171, lon: 101.7782 },
+  '呼和浩特': { lat: 40.8424, lon: 111.7490 },
+  '乌鲁木齐': { lat: 43.8256, lon: 87.6168 },
+  '拉萨': { lat: 29.6500, lon: 91.1000 },
+  '南宁': { lat: 22.8170, lon: 108.3665 },
+  '海口': { lat: 20.0174, lon: 110.3492 },
+  '太原': { lat: 37.8706, lon: 112.5489 },
+  '石家庄': { lat: 38.0428, lon: 114.5149 },
+  '苏州': { lat: 31.2990, lon: 120.5853 },
+  '无锡': { lat: 31.4912, lon: 120.3119 },
+  '宁波': { lat: 29.8683, lon: 121.5440 },
+  '佛山': { lat: 23.0218, lon: 113.1218 },
+  '东莞': { lat: 23.0430, lon: 113.7633 },
+  '珠海': { lat: 22.2710, lon: 113.5767 },
+  '惠州': { lat: 23.1116, lon: 114.4164 },
+  '温州': { lat: 27.9939, lon: 120.6993 },
+  '徐州': { lat: 34.2044, lon: 117.2854 },
+  '烟台': { lat: 37.4638, lon: 121.4479 },
+  '潍坊': { lat: 36.7069, lon: 119.1618 },
+  '绍兴': { lat: 30.0302, lon: 120.5802 },
+  '台州': { lat: 28.6561, lon: 121.4208 },
+  '嘉兴': { lat: 30.7523, lon: 120.7585 },
+  '金华': { lat: 29.0790, lon: 119.6474 },
+  '常州': { lat: 31.8106, lon: 119.9741 },
+  '唐山': { lat: 39.6305, lon: 118.1802 },
+  '保定': { lat: 38.8740, lon: 115.4646 },
+  '临沂': { lat: 35.0653, lon: 118.3565 },
+  '济宁': { lat: 35.4148, lon: 116.5871 },
+  '洛阳': { lat: 34.6197, lon: 112.4540 },
+  '泉州': { lat: 24.8741, lon: 118.6755 },
+  '漳州': { lat: 24.5130, lon: 117.6473 },
+  '襄阳': { lat: 32.0420, lon: 112.1448 },
+  '宜昌': { lat: 30.6920, lon: 111.2865 },
+  '株洲': { lat: 27.8343, lon: 113.1340 },
+  '湘潭': { lat: 27.8297, lon: 112.9440 },
+  '岳阳': { lat: 29.3570, lon: 113.1290 },
+  '衡阳': { lat: 26.8935, lon: 112.5720 },
+  '柳州': { lat: 24.3260, lon: 109.4280 },
+  '桂林': { lat: 25.2742, lon: 110.2900 },
+  '三亚': { lat: 18.2528, lon: 109.5120 },
+  '大理': { lat: 25.6065, lon: 100.2676 },
+  '丽江': { lat: 26.8721, lon: 100.2299 },
+  '连云港': { lat: 34.5967, lon: 119.2219 },
+};
+
 // ==================== 工具函数 ====================
 
 function getCityAdcode(city: string): string {
-  const lowerCity = city.toLowerCase();
-  return cityAdcodes[lowerCity] || '110000';
+  const normalized = city.toLowerCase().replace(/\s+/g, '');
+  return cityAdcodes[normalized] || '110000';
 }
 
 function getInternationalCity(city: string): { lat: number; lon: number; name: string } | null {
-  const lowerCity = city.toLowerCase();
-  return internationalCities[lowerCity] || null;
+  const normalized = city.toLowerCase().replace(/\s+/g, '');
+  return internationalCities[normalized] || null;
 }
 
-function parseWindPower(power: string): number {
+function getCityCoords(city: string): { lat: number; lon: number } | null {
+  // 先检查国内城市
+  if (cityCoordinates[city]) {
+    return cityCoordinates[city];
+  }
+  // 检查国际城市
+  const intl = getInternationalCity(city);
+  if (intl) {
+    return { lat: intl.lat, lon: intl.lon };
+  }
+  return null;
+}
+
+async function getCityAQI(city: string): Promise<AirQuality | undefined> {
+  const coords = getCityCoords(city);
+  if (coords) {
+    const aqi = await fetchAirQuality(coords.lat, coords.lon);
+    return aqi || undefined;
+  }
+  return undefined;
+}
+
+function parseWindPower(power: string): string {
+  // 保留原始风力等级显示
   const match = power.match(/(\d+)/);
-  return match ? parseInt(match[1]) : 3;
+  if (match) {
+    const level = match[1];
+    return `${level}级`;
+  }
+  return power || '≤3级';
 }
 
 // 天气图标映射
@@ -371,18 +474,24 @@ async function fetchGaodeWeather(city: string): Promise<WeatherData> {
       nightpower: cast.nightpower,
     }));
     
+    // 解析风力等级并转换为大致风速
+    const windLevel = parseWindPower(live.windpower);
+    const windNum = parseInt(live.windpower?.match(/(\d+)/)?.[1] || '3');
+    const windSpeedKmh = String(windNum * 5); // 风力等级 * 5 ≈ km/h
+    
     return {
       current_condition: [{
         temp_C: live.temperature,
         humidity: live.humidity,
         weatherDesc: [{ value: live.weather }],
-        windspeedKmph: String(parseWindPower(live.windpower) * 5),
+        windspeedKmph: windSpeedKmh,
         FeelsLikeC: live.temperature,
         uvIndex: '0',
         pressure: '1013',
         visibility: '10',
         windDirection: live.winddirection,
         reportTime: live.reporttime,
+        windLevel: windLevel, // 风力等级（如"3级"）
       }],
       weather: weatherArray,
     };
@@ -615,11 +724,12 @@ function formatWeather(data: WeatherData, city: string, options: {
   
   // 当前天气卡片
   const icon = getWeatherIcon(description);
+  const windLevel = current.windLevel || `${Math.round(parseInt(windSpeed) / 5)}级`;
   const currentCard = boxen([
     `${icon}  ${chalk.bold(description)}`,
     `🌡️ 温度: ${tempColor(temp)}`,
     `💧 湿度: ${chalk.cyan(humidity)}%`,
-    `🌬️ ${windDirection}风  ${chalk.cyan(convertWind(parseInt(windSpeed)))} ${windUnit}`,
+    `🌬️ ${windDirection}风  ${chalk.cyan(windLevel)}`,
   ].join('\n'), {
     padding: 1,
     borderColor: 'green',
@@ -793,21 +903,21 @@ program
       // 解析城市
       if (!options.json) {
         const resolverSpinner = ora(`解析城市: ${inputCity}...`).start();
-        const targetCity = await resolveCity(inputCity);
-        resolverSpinner.succeed(`城市: ${targetCity}`);
+        const resolveResult = await resolveCity(inputCity);
+        const targetCity = resolveResult.resolvedName;
+        
+        if (resolveResult.fromApi) {
+          resolverSpinner.succeed(`已解析: ${inputCity} → ${targetCity}`);
+        } else {
+          resolverSpinner.succeed(`城市: ${targetCity}`);
+        }
         
         const weatherSpinner = ora(`正在获取 ${targetCity} 天气数据...`).start();
         const weatherData = await fetchWeather(targetCity, options.cache);
         
         // 获取空气质量
         if (options.aqi) {
-          const intlCity = getInternationalCity(targetCity);
-          if (intlCity) {
-            weatherData.aqi = await fetchAirQuality(intlCity.lat, intlCity.lon) || undefined;
-          } else {
-            // 使用北京坐标作为默认（高德API不提供空气质量）
-            weatherData.aqi = await fetchAirQuality(39.9042, 116.4074) || undefined;
-          }
+          weatherData.aqi = await getCityAQI(targetCity);
         }
         
         weatherSpinner.succeed('天气数据获取成功');
@@ -815,13 +925,13 @@ program
         const formatted = formatWeather(weatherData, targetCity, options);
         console.log('\n' + formatted);
       } else {
-        // JSON模式不显示 spinner
-        const targetCity = await resolveCity(inputCity);
+        // JSON模式不显示spinner，不输出日志
+        const resolveResult = await resolveCity(inputCity);
+        const targetCity = resolveResult.resolvedName;
         const weatherData = await fetchWeather(targetCity, options.cache);
         
         if (options.aqi) {
-          const intlCity = getInternationalCity(targetCity);
-          weatherData.aqi = await fetchAirQuality(intlCity?.lat || 39.9042, intlCity?.lon || 116.4074) || undefined;
+          weatherData.aqi = await getCityAQI(targetCity);
         }
         
         const formatted = formatWeather(weatherData, targetCity, options);
