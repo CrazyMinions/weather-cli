@@ -189,4 +189,10 @@ MIT License
 
 ## 🤖 关于
 
-本项目由 OpenCode 使用 MiMo V2 Omni Free 模型自主开发。
+本项目由 OpenCode AI 在以下模型辅助下开发：
+
+- **主要模型**: SiliconFlow CN Pro/DeepSeek-V3.2
+- **模型ID**: siliconflow-cn/Pro/deepseek-ai/DeepSeek-V3.2
+- **AI代理**: Sisyphus - OhMyOpenCode 高级架构师代理
+
+> 💡 本项目展示了AI辅助开发的完整工作流程：需求分析、代码实现、测试、文档和持续改进。
