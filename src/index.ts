@@ -12,6 +12,18 @@ interface WeatherData {
     windspeedKmph: string;
     FeelsLikeC: string;
     uvIndex: string;
+    pressure: string;
+    visibility: string;
+  }>;
+  weather: Array<{
+    date: string;
+    astronomy: Array<{
+      sunrise: string;
+      sunset: string;
+    }>;
+    hourly: Array<{
+      chanceofrain: string;
+    }>;
   }>;
 }
 
@@ -101,6 +113,18 @@ async function fetchWeatherFallback(city: string): Promise<WeatherData> {
         windspeedKmph: String(current.wind_speed_10m),
         FeelsLikeC: String(current.temperature_2m), // 简化：体感温度等于实际温度
         uvIndex: "0", // Open-Meteo 当前API不提供UV指数
+        pressure: "1013", // Open-Meteo 当前API不提供气压，使用默认值
+        visibility: "10", // Open-Meteo 当前API不提供能见度，使用默认值
+      }],
+      weather: [{
+        date: new Date().toISOString().split('T')[0],
+        astronomy: [{
+          sunrise: "06:29 AM", // 默认日出时间
+          sunset: "06:25 PM", // 默认日落时间
+        }],
+        hourly: [{
+          chanceofrain: "0", // 默认无降水概率
+        }],
       }],
     };
     
@@ -151,6 +175,18 @@ function formatWeather(data: WeatherData, city: string, unit: string = 'metric',
   const description = current.weatherDesc[0]?.value || '未知';
   const windSpeed = current.windspeedKmph;
   const uvIndex = current.uvIndex;
+  
+  // 高级指标
+  const pressure = current.pressure || 'N/A';
+  const visibility = current.visibility || 'N/A';
+  
+  // 日出日落时间（从当天的weather数据获取）
+  const todayWeather = data.weather && data.weather[0];
+  const sunrise = todayWeather?.astronomy?.[0]?.sunrise || 'N/A';
+  const sunset = todayWeather?.astronomy?.[0]?.sunset || 'N/A';
+  
+  // 降水概率（从第一个hourly数据获取）
+  const chanceOfRain = todayWeather?.hourly?.[0]?.chanceofrain || 'N/A';
 
   // 单位转换函数
   const convertTemp = (celsius: number): number => {
@@ -214,6 +250,22 @@ function formatWeather(data: WeatherData, city: string, unit: string = 'metric',
 
   // UV指数单独一行（可扩展更多指标）
   lines.push(`│  ☀️ UV指数 ${uvColor(uvIndex.padStart(2))} (${uvIndex})                         │`);
+
+  // 高级指标（仅当--advanced参数启用时显示）
+  if (advanced) {
+    // 分隔线
+    lines.push(title('├─────────────────────────────┤'));
+    
+    // 高级指标标题
+    lines.push(title('│  📈 高级指标                            │'));
+    
+    // 高级指标行
+    lines.push(`│  🌅 日出    ${chalk.cyan(sunrise.padEnd(10))}                 │`);
+    lines.push(`│  🌇 日落    ${chalk.cyan(sunset.padEnd(10))}                 │`);
+    lines.push(`│  📊 气压    ${chalk.cyan(pressure.padEnd(10))} hPa            │`);
+    lines.push(`│  🌧️ 降水    ${chalk.cyan(chanceOfRain.padEnd(10))} %             │`);
+    lines.push(`│  👁️ 能见度  ${chalk.cyan(visibility.padEnd(10))} km             │`);
+  }
 
   // 底部边框
   lines.push(title('└─────────────────────────────┘'));
