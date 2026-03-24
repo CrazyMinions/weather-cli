@@ -64,120 +64,6 @@ weather Beijing
 weather Shanghai
 ```
 
-### 高级用法（分层行政区划查询）
-
-weather-cli 支持完整的中国行政区划查询，包括省级、市级、区县级和街道级别：
-
-```bash
-# 省级查询（返回省会天气）
-weather 四川省
-
-# 市级查询  
-weather 成都市
-
-# 区县级查询（自动地理编码）
-weather 北京市朝阳区
-weather 四川成都双流区
-weather 上海市浦东新区
-weather 广州市天河区体育西路
-
-# 使用官方行政区划代码
-weather 110105  # 北京市朝阳区adcode
-weather 510122  # 成都市双流区adcode
-```
-
-**工作原理**：
-1. **地理编码**：当输入地址（如"北京市朝阳区"）时，weather-cli调用高德地理编码API转换为6位行政区划代码（adcode）
-2. **天气查询**：使用adcode查询高德天气API获取实时天气和预报
-3. **缓存机制**：地理编码结果缓存24小时，减少API调用
-
-**查询精度说明**：
-- 支持3000+中国行政区划单位（省、市、区县、街道）
-- 当区县级无气象数据时，自动降级返回市级天气数据
-- 直辖市（北京、上海、天津、重庆）查询无需添加"市"后缀
-- 港澳台地区推荐使用Open-Meteo查询（`weather 香港`、`weather 澳门`）
-
-### 命令选项
-
-```bash
-# 5天预报
-weather 北京 --days 5
-
-# 显示详细信息
-weather 北京 --advanced
-
-# 24小时逐时预报
-weather 北京 --hourly
-
-# 显示空气质量
-weather 北京 --aqi
-
-> **AQI支持说明**: 
-> - ✅ **国际城市**: 所有国际城市（纽约、伦敦、东京等）均支持空气质量数据
-> - ✅ **国内主要城市**: 支持北京、上海、广州、深圳等60+个城市（完整列表见[代码](../src/index.ts#L378)）
-> - ⚠️ **其他国内城市**: 若城市暂无坐标映射，将显示提醒"该城市的空气质量数据暂时不可用"
-> - 📊 **数据来源**: Open-Meteo Air Quality API（免费，无需API Key）
-
-# 英制单位（°F, mph）
-weather 北京 --unit imperial
-
-# JSON格式输出
-weather 北京 --json
-
-# 壁纸模式
-weather 北京 --wallpaper
-
-# 禁用缓存
-weather 北京 --no-cache
-
-# 组合使用
-weather 广州 --days 5 --advanced --hourly --aqi
-```
-
-## 📸 效果预览
-
-运行 `weather 北京` 查看实际效果，以下为功能展示：
-
-### 标准模式
-
-- 渐变色标题
-- 卡片式布局（实时天气、详细信息）
-- 多日预报表格
-- 支持中英文城市名
-
-### 壁纸模式 (`--wallpaper`)
-
-简洁的单卡片显示，适合做壁纸或快速查看：（**注意：壁纸模式下会忽略 `--aqi`、`--hourly`、`--advanced` 等其他选项，仅显示核心天气信息**）
-
-```
-+==================================================+
-|                                                  |
-|                       北京                       |
-|                                                  |
-|                       12°C                       |
-|                         晴                       |
-|                                                  |
-|               湿度: 25%  风向: 东南风             |
-|                                                  |
-+==================================================+
-```
-
-### JSON模式 (`--json`)
-
-```json
-{
-  "city": "北京",
-  "current": {
-    "temperature": 12,
-    "humidity": 25,
-    "weather": "晴",
-    "windSpeed": 15,
-    "windDirection": "东南"
-  },
-  "forecast": [...]
-}
-```
-
 ## 🌍 支持城市
 
 ### 国内城市（100+）
@@ -229,3 +115,127 @@ MIT License
 - **AI代理**: Sisyphus - OhMyOpenCode 高级架构师代理
 
 > 💡 本项目展示了AI辅助开发的完整工作流程：需求分析、代码实现、测试、文档和持续改进。
+
+
+---
+
+
+## English Version
+
+# 🌤️ weather-cli
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
+
+A beautifully styled command-line weather query tool supporting Gaode Weather API and Open-Meteo.
+
+## ✨ Features
+
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Multi-day Forecast | `--days 1-5` | 1-5 day weather forecast |
+| Detailed Information | `--advanced` | Wind speed, update time, etc. |
+| 24-hour Forecast | `--hourly` | Hour-by-hour weather changes |
+| Air Quality | `--aqi` | AQI, PM2.5, PM10, etc. |
+| JSON Output | `--json` | Suitable for script integration |
+| Wallpaper Mode | `--wallpaper` | Clean, aesthetic card style |
+| Unit Switch | `--unit` | Metric (°C) / Imperial (°F) |
+| Local Cache | Automatic | 30-minute cache reduces API calls |
+
+## 📦 Installation
+
+### Global Installation
+
+```bash
+npm install -g .
+```
+
+### Local Usage
+
+```bash
+git clone https://github.com/CrazyMinions/weather-cli.git
+cd weather-cli
+npm install
+```
+
+## ⚙️ Configuration
+
+Create a `.env` file in the project root:
+
+```env
+# Gaode Map Weather API Key (Required)
+# Application URL: https://lbs.amap.com/
+# Select "Web Service" type
+GAODE_MAP_API_KEY=your_key_here
+
+# Baidu Map API Key (Optional, for city resolution)
+BAIDU_MAP_API_KEY=your_key_here
+```
+
+## 🚀 Usage
+
+### Basic Usage
+
+```bash
+# Query Beijing weather
+weather 北京
+
+# Query Shanghai weather
+weather 上海
+
+# Use English city names
+weather Beijing
+weather Shanghai
+```
+
+## 🌍 Supported Cities
+
+### Chinese Cities (100+)
+
+Beijing, Shanghai, Guangzhou, Shenzhen, Chengdu, Hangzhou, Wuhan, Xi'an, Nanjing, Tianjin, Chongqing, Changsha, Kunming, Xiamen, Qingdao, Dalian, Shenyang, Harbin, Changchun, Zhengzhou, Jinan, Fuzhou, Hefei, Nanchang, Guiyang, Lanzhou, Yinchuan, Xining, Hohhot, Urumqi, Lhasa, Nanning, Haikou, Taipei, Hong Kong, Macau...
+
+### International Cities
+
+Tokyo, New York, London, Paris, Seoul, Singapore, Sydney, Los Angeles, San Francisco, Berlin, Moscow, Dubai, Bangkok, Mumbai, Toronto...
+
+## 📊 Data Sources
+
+| Data Type | Source | Notes |
+|-----------|--------|-------|
+| Chinese City Weather | Gaode Weather API | Real-time + 4-day forecast |
+| International City Weather | Open-Meteo | Free, no API Key required |
+| Air Quality | Open-Meteo Air Quality | Free, no API Key required |
+
+## 🛠️ Development
+
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode
+npm run dev
+
+# Build
+npm run build
+
+# Type checking
+npm run typecheck
+```
+
+## 📄 License
+
+MIT License
+
+## 🤝 Contributing
+
+Pull Requests are welcome!
+
+## 🤖 About
+
+This project was developed with assistance from OpenCode AI using the following models:
+
+- **Primary Model**: SiliconFlow CN Pro/DeepSeek-V3.2
+- **Model ID**: siliconflow-cn/Pro/deepseek-ai/DeepSeek-V3.2
+- **AI Agent**: Sisyphus - OhMyOpenCode Senior Architect Agent
+
+> 💡 This project demonstrates the complete workflow of AI-assisted development: requirements analysis, code implementation, testing, documentation, and continuous improvement.
